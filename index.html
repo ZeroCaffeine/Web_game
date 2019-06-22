@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 	<meta charset="utf-8"/>
@@ -16,6 +16,8 @@
 	
 		var x = canvas.width / 2;
 		var y = canvas.height - 30;
+		var minSpeed = 3;
+		var maxSpeed = 4.5;
 		var dx = 3;
 		var dy = -3;
 
@@ -24,6 +26,7 @@
 		var paddleWidth = 75;
 		var paddleHeight = 10;
 		var paddleX = (canvas.width - paddleWidth) / 2;
+		var paddleY = (canvas.height - paddleHeight);
 		var paddleSpeed = 5;
 
 		var rightPressed = false;
@@ -32,10 +35,18 @@
 		document.addEventListener("keydown", keyDownHandler, false);
 		document.addEventListener("keyup", keyUpHandler, false);
 		document.addEventListener("mousemove", mouseMoveHandler, false);
+		
+		var score = 0;
+		var lives = 3;
+		
+		var level = 1;
+
+		var isBrickIn = false;
+		var isPaddleIn = false;
 
 		// 행렬 개수
-		var brickRowCount = 3;
-		var brickColumnCount = 5;
+		var brickRowCount = 0;
+		var brickColumnCount = 0;
 		// 벽돌 가로/세로
 		var brickWidth = 75;
 		var brickHeight = 20;
@@ -46,17 +57,66 @@
 		var brickOffsetLeft = 30;
 
 		var bricks = [];
-		for(var r = 0; r < brickRowCount; r++) {
-			bricks[r] = [];
-			for(var c = 0; c < brickColumnCount; c++) {
-				bricks[r][c] = { x: 0, y: 0, status: 1 };
+		
+		function createBricks(level) {
+			switch (level) {
+				case 1 : 
+					// 행렬 개수
+					brickRowCount = 3;
+					brickColumnCount = 5;
+
+					for(var r = 0; r < brickRowCount; r++) {
+						bricks[r] = [];
+						for(var c = 0; c < brickColumnCount; c++) {
+							bricks[r][c] = { x: 0, y: 0, status: 1 };
+						}
+					}	
+					break;
+				case 2 : 
+					brickRowCount = 4;
+					brickColumnCount = 5;
+					
+					for(var r = 0; r < brickRowCount; r++) {
+						bricks[r] = [];
+						for(var c = 0; c < brickColumnCount; c++) {
+							if (r >= 1 && r <= 2 && c >= 1 && c <= 3)
+								bricks[r][c] = { x: 0, y: 0, status: 2 };
+							else 
+								bricks[r][c] = { x: 0, y: 0, status: 1 };
+						}
+					}					
+					break;
+				case 3 : 
+					brickRowCount = 5;
+					brickColumnCount = 5;
+					
+					for(var r = 0; r < brickRowCount; r++) {
+						bricks[r] = [];
+						for(var c = 0; c < brickColumnCount; c++) {
+							if (r == 0 || r == brickRowCount - 1 || c == 0 || c == brickColumnCount - 1) 
+								bricks[r][c] = { x: 0, y: 0, status: 3};
+							else if ((r == 1 || r == brickRowCount - 2) && (c != 0 || c != brickColumnCount - 1)) 
+								bricks[r][c] = { x: 0, y: 0, status: 2};
+							else
+								bricks[r][c] = { x: 0, y: 0, status: 1};
+						}
+					}					
+					break;
+				break;
 			}
+			//alert("Create level : " + level);
+			//alert("Row / Col : " + bricks.length + ", " + bricks[0].length);
+			//alert("hp : " + bricks[0][0].status);
+			alert("Stage " + level + " 시작");
 		}
 
-		var score = 0;
-		var lives = 3;
+		createBricks(level);
 
-		//var interval = setInterval(draw, 1000);
+		function drawStage() {
+			context.font = "16px Arial";
+			context.fillStyle = "#009500";
+			context.fillText("스테이지 : " + level, canvas.width / 2 - 20, 20);
+		}
 
 		function drawLives() {
 			context.font = "16px Arial";
@@ -70,25 +130,102 @@
 			context.fillText("Score: "+score, 8, 20);
 		}
 
-		function collisionDetection() {
+		function collisionDetection_Brick() {
+			var count = 0;
+
 			for(var r = 0; r < brickRowCount; r++) {
 				for(var c = 0; c < brickColumnCount; c++) {
 					var brick = bricks[r][c];
 				
-					if (brick.status == 1 && 
-						x > brick.x && x < brick.x + brickWidth && 
-						y > brick.y && y < brick.y + brickHeight) {
-						dy = -dy;
-						brick.status = 0;
-						score++;
-						if(score == brickRowCount * brickColumnCount) {
-							alert("게임 클리어!");
-							document.location.reload();
-							//clearInterval(interval);
+					if (brick.status >= 1) {
+						count++ ;
+						if (checkBallInsideBrick(brick) == true) {
+							if (checkCollisionBrickSide(brick) == false) {
+								dy = -dy;
+							} else {
+								dx = -dx;
+							}
+							speedUp();
+
+							brick.status -= 1;
+							score++;
+							//if(score == brickRowCount * brickColumnCount) {
+							if (checkClear()) {
+								stageClear();							
+								//alert("게임 클리어!");
+								//document.location.reload();
+								//clearInterval(interval);
+							}
 						}
 					}
 				}
 			}
+
+			if (count == 0)
+				stageClear();
+		}
+
+		// 부딪힌 벽돌이 옆면인지 / 앞뒷면인지 검사
+		// 옆으로 부딪혔다면 true 반환
+		function checkCollisionBrickSide(brick) {
+			if (y < brick.y + brickHeight && y > brick.y)
+				return true;
+				
+			return false;
+		}
+
+		function checkBallInsideBrick(brick) {
+			//x > brick.x && x < brick.x + brickWidth && 
+			//y > brick.y && y < brick.y + brickHeight
+			
+			// 1. 대략적 조건 : 공과의 거리가 d 이하인 벽돌이 대상
+			var distance = Math.sqrt(Math.pow(brick.x + brickWidth / 2 - x, 2) + Math.pow(brick.y + brickHeight / 2 - y, 2));
+			var limit = Math.sqrt(Math.pow(brickWidth / 2, 2) + Math.pow(brickHeight / 2, 2)) + ballRadius;
+
+			if (distance > limit) 
+				return false;
+
+			// 2. 세부 조건 : 벽돌의 최소단위 1마다 공의 중심과 반지름 이하의 거리인지 체크
+			for (var i = 0; i < brickWidth; i++) {
+				for (var j = 0; j < brickHeight; j++) {
+					var brickX = brick.x + i;
+					var brickY = brick.y + j;
+					
+					var d = Math.sqrt(Math.pow(brickX - x, 2) + Math.pow(brickY - y, 2));
+					if (d <= ballRadius) 
+						return true;
+				}
+			}
+
+			return false;
+		}
+
+		function stageClear() {
+			alert("Stage " + level +" 클리어!");
+			level += 1;
+
+			if (level <= 3) {
+				createBricks(level);
+				//alert("Create Bricks");
+				initBallAndPaddle();
+				//alert("Init ball and paddle");
+				
+			} else {
+				alert("게임 클리어!");
+				document.location.reload();
+			}
+		}
+
+		function checkClear() {
+			for (var r = 0; r < brickRowCount; r++) {
+				for (var c = 0; c < brickColumnCount; c++) {
+					if (bricks[r][c].status != 0) {
+						return false;
+					}
+				}
+			}
+
+			return true;
 		}
 
 		function mouseMoveHandler(event) {
@@ -139,7 +276,7 @@
 		function drawBricks() {
 			for(var r = 0; r < brickRowCount; r++) {
 				for(var c = 0; c < brickColumnCount; c++) {
-					if (bricks[r][c].status == 1) {
+					if (bricks[r][c].status >= 1) {
 						var brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
 						var brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
 					
@@ -148,7 +285,19 @@
 					
 						context.beginPath();
 						context.rect(brickX, brickY, brickWidth, brickHeight);
-						context.fillStyle = "#0095DD";
+					
+						if (bricks[r][c].status == 1) {
+							context.fillStyle = "#00ace5";
+						} else if (bricks[r][c].status == 2) {
+							context.fillStyle = "#00e585";
+						} else if (bricks[r][c].status == 3) {
+							context.fillStyle = "#efef0b";
+						} else if (bricks[r][c].status == 4) {
+							context.fillStyle = "#f28818";
+						} else if (bricks[r][c].status == 5) {
+							context.fillStyle = "#f11717";
+						} 
+					
 						context.fill();
 						context.closePath();
 					}
@@ -156,41 +305,116 @@
 			}
 		}
 		
-		function draw() {
-			context.clearRect(0, 0, canvas.width, canvas.height);
-			drawBricks();
-			drawBall();
-			drawPaddle();
-			collisionDetection();
-			drawScore();
-			drawLives();
+		function initBallAndPaddle() {
+			x = canvas.width / 2;
+			y = canvas.height - 30;
+			initSpeed();
+			paddleX = (canvas.width - paddleWidth) / 2;
+		}
 
+		function gameOver() {
+			alert("GAME OVER");
+			document.location.reload();
+			clearInterval(interval); // Needed for Chrome to end game
+		}
+
+		function collisionDetection_PaddleAndCanvas() {
 			if (x + ballRadius / 2 + dx > canvas.width || x - ballRadius / 2 + dx < 0) {
 				dx = -dx;
 			}
 
+			var check = checkBallInsidePaddle();
+			if (check == true) {
+				if (!isPaddleIn) {
+					isPaddleIn = true;
+					dy = -dy;
+					speedUp();
+				}
+			} else {
+				if (isPaddleIn) {
+					isPaddleIn = false;
+				}
+			}
+			// isPaddleIn : 연산 보조용
+			// -> 보조가 없으면 ball 이 paddle 이 닿은순간 튕기지 않고 겹쳐진 뒤에 튕기기 때문에 
+			// -> 밖으로 튕겨지면서 paddle의 가장자리에 닿아 다시 안으로 튕겨지는 버그 발생 
+
 			if (y - ballRadius / 2 + dy < 0) {
 				dy = -dy;
-			} else if (y + dy > canvas.height-ballRadius) {
-				if(x > paddleX && x < paddleX + paddleWidth) {
-					dy = -dy;
-				}
-				else {
+			} else if (y + ballRadius > canvas.height) {
+				//if(x > paddleX && x < paddleX + paddleWidth) {
+				//	dy = -dy;
+				//}
+				//else {
 					lives--;
 					if(!lives) {
-						alert("GAME OVER");
-						document.location.reload();
-						clearInterval(interval); // Needed for Chrome to end game
+						gameOver();
 					}
 					else {
-						x = canvas.width/2;
-						y = canvas.height-30;
-						dx = 2;
-						dy = -2;
-						paddleX = (canvas.width-paddleWidth)/2;
+						initBallAndPaddle();
+				//	}
+				}
+			}
+		}
+
+		function initSpeed() {
+			dx = minSpeed;
+			dy = -minSpeed;
+		}
+		function speedUp() {
+			if (dx < maxSpeed && dy < maxSpeed) {
+				if (dx > 0) dx += 0.1;
+				else dx -= 0.1;
+
+				if (dy > 0) dy += 0.1;
+				else dy -= 0.1;
+			}
+		}
+
+		function checkCollisionPaddleSide() {
+			if (y < paddleY + paddleHeight && y > paddleY)
+				return true;
+				
+			return false;
+		}
+
+		function checkBallInsidePaddle() {
+			var distance = Math.sqrt(Math.pow(paddleX + paddleWidth / 2 - x, 2) + Math.pow(paddleY + paddleHeight / 2 - y, 2));
+			var limit = Math.sqrt(Math.pow(paddleWidth / 2, 2) + Math.pow(paddleHeight / 2, 2)) + ballRadius;
+
+			if (distance > limit) 
+				return false;
+
+			// 2. 세부 조건 : 벽돌의 최소단위 1마다 공의 중심과 반지름 이하의 거리인지 체크
+			for (var i = 0; i < paddleWidth; i++) {
+				for (var j = 0; j < paddleHeight; j++) {
+					var tempX = paddleX + i;
+					var tempY = paddleY + j;
+					
+					var d = Math.sqrt(Math.pow(tempX - x, 2) + Math.pow(tempY - y, 2));
+					if (d <= ballRadius) 
+					{
+						return true;
 					}
 				}
 			}
+
+			return false;
+		}
+
+		function draw() {
+			context.clearRect(0, 0, canvas.width, canvas.height);
+
+			drawBricks();
+			collisionDetection_Brick();
+
+			drawBall();
+			drawPaddle();
+			drawScore();
+			drawLives();
+
+
+			collisionDetection_PaddleAndCanvas();
 
 			x += dx;
 			y += dy;
